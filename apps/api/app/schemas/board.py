@@ -1,0 +1,44 @@
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from typing import Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class CreatorBrief(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    email: str
+    nickname: Optional[str]
+
+
+class BoardCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=8000)
+    visibility: Literal["public"] = "public"
+
+
+class BoardUpdate(BaseModel):
+    title: Optional[str] = Field(None, min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=8000)
+
+
+class BoardOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    title: str
+    description: Optional[str]
+    visibility: str
+    created_at: datetime
+    creator: CreatorBrief
+
+
+class BoardListResponse(BaseModel):
+    items: list[BoardOut]
+    total: int
+    skip: int
+    limit: int

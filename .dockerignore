@@ -1,0 +1,14 @@
+**/.venv
+**/node_modules
+**/__pycache__
+**/.git
+**/.env
+**/.env.*
+!/.env.prod.example
+**/dist
+.DS_Store
+*.md
+docs
+.cursor
+agent-transcripts
+assets
