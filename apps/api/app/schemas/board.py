@@ -37,8 +37,20 @@ class BoardOut(BaseModel):
     creator: CreatorBrief
 
 
+class PostBrief(BaseModel):
+    """列表页展示的留言摘要（正文已在服务端截断）。"""
+
+    id: uuid.UUID
+    content: str
+    author: CreatorBrief
+
+
+class BoardListItem(BoardOut):
+    recent_posts: list[PostBrief] = Field(default_factory=list)
+
+
 class BoardListResponse(BaseModel):
-    items: list[BoardOut]
+    items: list[BoardListItem]
     total: int
     skip: int
     limit: int

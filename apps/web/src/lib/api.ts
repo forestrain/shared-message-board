@@ -19,12 +19,37 @@ export type BoardOut = {
   creator: CreatorBrief;
 };
 
+export type PostBrief = {
+  id: string;
+  content: string;
+  author: CreatorBrief;
+};
+
+export type BoardListItem = BoardOut & {
+  recent_posts: PostBrief[];
+};
+
 export type BoardListResponse = {
-  items: BoardOut[];
+  items: BoardListItem[];
   total: number;
   skip: number;
   limit: number;
 };
+
+/** 兼容旧版 API（无 recent_posts 字段） */
+export function normalizeBoardListItem(raw: BoardOut & { recent_posts?: PostBrief[] }): BoardListItem {
+  return {
+    ...raw,
+    recent_posts: Array.isArray(raw.recent_posts) ? raw.recent_posts : [],
+  };
+}
+
+export function parseBoardListResponse(data: Partial<BoardListResponse> | null | undefined): BoardListItem[] {
+  if (!data?.items || !Array.isArray(data.items)) return [];
+  return data.items.map((item) =>
+    normalizeBoardListItem(item as BoardOut & { recent_posts?: PostBrief[] }),
+  );
+}
 
 export type PostOut = {
   id: string;

@@ -1,27 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Button, Card, Divider, List, NavBar, TextArea, Toast } from "antd-mobile";
-import type { BoardOut, PostListResponse, PostOut, UserPublic } from "../lib/api";
+import { Button, Card, Divider, List, TextArea, Toast } from "antd-mobile";
+import AppLayout from "../components/AppLayout";
+import { useAuth } from "../lib/AuthContext";
+import type { BoardOut, PostListResponse, PostOut } from "../lib/api";
 import { formatApiError, parseJson } from "../lib/api";
 
 export default function BoardDetailPage() {
   const { boardId } = useParams<{ boardId: string }>();
   const navigate = useNavigate();
+  const { me } = useAuth();
   const [board, setBoard] = useState<BoardOut | null>(null);
   const [posts, setPosts] = useState<PostOut[]>([]);
   const [postTotal, setPostTotal] = useState(0);
-  const [me, setMe] = useState<UserPublic | null>(null);
   const [draft, setDraft] = useState("");
   const [loadErr, setLoadErr] = useState<string | null>(null);
-
-  const refreshMe = useCallback(async () => {
-    const res = await fetch("/api/v1/users/me", { credentials: "include" });
-    if (!res.ok) {
-      setMe(null);
-      return;
-    }
-    setMe((await parseJson(res)) as UserPublic);
-  }, []);
 
   const loadBoard = useCallback(async () => {
     if (!boardId) return;
@@ -46,10 +39,6 @@ export default function BoardDetailPage() {
   }, [boardId]);
 
   useEffect(() => {
-    void refreshMe();
-  }, [refreshMe]);
-
-  useEffect(() => {
     void loadBoard();
     void loadPosts();
   }, [loadBoard, loadPosts]);
@@ -59,41 +48,53 @@ export default function BoardDetailPage() {
 
   if (!boardId) {
     return (
-      <div style={{ padding: 16 }}>
-        <NavBar onBack={() => navigate("/")}>错误</NavBar>
-        <p>无效的板链接</p>
-      </div>
+      <AppLayout tagline="页面错误">
+        <Card className="page-card">
+          <p>无效的板链接</p>
+          <Button onClick={() => navigate("/")}>返回首页</Button>
+        </Card>
+      </AppLayout>
     );
   }
 
   if (loadErr || !board) {
     return (
-      <div style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
-        <NavBar onBack={() => navigate(-1)}>留言板</NavBar>
-        <Card style={{ marginTop: 12 }}>
-          <div style={{ color: "#c00" }}>{loadErr ?? "加载中…"}</div>
+      <AppLayout tagline="留言板">
+        <Card className="page-card">
+          <div className="error-text">{loadErr ?? "加载中…"}</div>
           <Button style={{ marginTop: 12 }} onClick={() => void loadBoard()}>
             重试
           </Button>
+          <Button fill="outline" style={{ marginTop: 8 }} onClick={() => navigate("/")}>
+            返回首页
+          </Button>
         </Card>
-      </div>
+      </AppLayout>
     );
   }
 
   return (
-    <div style={{ padding: 16, maxWidth: 480, margin: "0 auto", paddingBottom: 32 }}>
-      <NavBar onBack={() => navigate(-1)}>{board.title}</NavBar>
+    <AppLayout tagline={board.title}>
+      <button type="button" className="back-link" onClick={() => navigate(-1)}>
+        ← 返回
+      </button>
 
-      <Card style={{ marginTop: 12 }} title="板介绍">
-        <div style={{ color: "#666", fontSize: 13, marginBottom: 8 }}>
+      <Card className="page-card">
+        <h2 className="page-card-title">{board.title}</h2>
+        <p className="board-meta">
           {board.creator.nickname || board.creator.email} · {new Date(board.created_at).toLocaleString("zh-CN")}
-        </div>
-        <div style={{ whiteSpace: "pre-wrap" }}>{board.description || "（无描述）"}</div>
+        </p>
+        <div className="board-desc">{board.description || "（无描述）"}</div>
       </Card>
 
       <Card
-        style={{ marginTop: 16 }}
-        title={`帖子（${postTotal}）`}
+        className="page-card"
+        title={
+          <div className="card-title-row">
+            <span>帖子</span>
+            <span className="count-badge">{postTotal}</span>
+          </div>
+        }
         extra={
           <Button size="small" fill="outline" onClick={() => void loadPosts()}>
             刷新
@@ -101,7 +102,12 @@ export default function BoardDetailPage() {
         }
       >
         {!me ? (
-          <div style={{ color: "#999", fontSize: 13, marginBottom: 12 }}>登录后可发帖（公开板帖子列表所有人可见）。</div>
+          <div className="empty-hint">
+            <button type="button" className="text-link" onClick={() => navigate("/login")}>
+              登录
+            </button>
+            后可发帖（列表所有人可见）。
+          </div>
         ) : (
           <>
             <TextArea
@@ -115,7 +121,7 @@ export default function BoardDetailPage() {
             <Button
               block
               color="primary"
-              style={{ marginTop: 8 }}
+              className="publish-btn"
               onClick={async () => {
                 const c = draft.trim();
                 if (!c) {
@@ -144,18 +150,19 @@ export default function BoardDetailPage() {
             >
               发布
             </Button>
-            <Divider />
+            <Divider className="section-divider" />
           </>
         )}
 
-        <List style={{ margin: "-8px 0" }}>
+        <List className="post-list">
           {posts.length === 0 ? (
-            <div style={{ padding: "12px 0", color: "#999" }}>还没有帖子，来做第一条吧。</div>
+            <div className="empty-hint">还没有帖子，来做第一条吧。</div>
           ) : (
             posts.map((p) => (
               <List.Item
                 key={p.id}
-                title={<span style={{ whiteSpace: "pre-wrap", fontWeight: 500 }}>{p.content}</span>}
+                className="post-list-item"
+                title={<span className="post-content">{p.content}</span>}
                 description={`${p.author.nickname || p.author.email} · ${new Date(p.created_at).toLocaleString("zh-CN")}`}
                 extra={
                   canDeletePost(p) ? (
@@ -192,6 +199,6 @@ export default function BoardDetailPage() {
           )}
         </List>
       </Card>
-    </div>
+    </AppLayout>
   );
 }

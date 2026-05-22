@@ -9,12 +9,46 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import Board, User
-from app.schemas.board import BoardCreate, BoardListResponse, BoardOut, BoardUpdate
+from app.models import Board, Post, User
+from app.schemas.board import (
+    BoardCreate,
+    BoardListItem,
+    BoardListResponse,
+    BoardOut,
+    BoardUpdate,
+    PostBrief,
+)
 
 router = APIRouter(prefix="/boards", tags=["boards"])
 
 PUBLIC = "public"
+POST_BRIEF_MAX = 80
+
+
+def _truncate_post_content(text: str, max_len: int = POST_BRIEF_MAX) -> str:
+    single_line = " ".join(text.split())
+    if len(single_line) <= max_len:
+        return single_line
+    return single_line[: max_len - 1] + "…"
+
+
+def _recent_posts_by_board(
+    db: Session, board_ids: list[uuid.UUID], per_board: int = 2
+) -> dict[uuid.UUID, list[Post]]:
+    if not board_ids:
+        return {}
+    rows = db.scalars(
+        select(Post)
+        .options(joinedload(Post.author))
+        .where(Post.board_id.in_(board_ids), Post.deleted_at.is_(None))
+        .order_by(Post.created_at.desc())
+    ).unique().all()
+    grouped: dict[uuid.UUID, list[Post]] = {}
+    for post in rows:
+        bucket = grouped.setdefault(post.board_id, [])
+        if len(bucket) < per_board:
+            bucket.append(post)
+    return grouped
 
 
 @router.get("", response_model=BoardListResponse)
@@ -26,7 +60,21 @@ def list_public_boards(
     base = select(Board).options(joinedload(Board.creator)).where(Board.visibility == PUBLIC)
     total = db.scalar(select(func.count()).select_from(Board).where(Board.visibility == PUBLIC)) or 0
     rows = db.scalars(base.order_by(Board.created_at.desc()).offset(skip).limit(limit)).unique().all()
-    items = [BoardOut.model_validate(b) for b in rows]
+    board_ids = [b.id for b in rows]
+    posts_map = _recent_posts_by_board(db, board_ids, per_board=2)
+    items: list[BoardListItem] = []
+    for board in rows:
+        briefs = [
+            PostBrief(
+                id=p.id,
+                content=_truncate_post_content(p.content),
+                author=p.author,
+            )
+            for p in posts_map.get(board.id, [])
+        ]
+        item = BoardListItem.model_validate(board)
+        item.recent_posts = briefs
+        items.append(item)
     return BoardListResponse(items=items, total=int(total), skip=skip, limit=limit)
 
 
