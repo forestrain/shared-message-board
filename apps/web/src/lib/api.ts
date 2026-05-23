@@ -23,6 +23,8 @@ export type PostBrief = {
   id: string;
   content: string;
   author: CreatorBrief;
+  quoted_post_id?: string | null;
+  quoted_post?: QuotedPostBrief | null;
 };
 
 export type BoardListItem = BoardOut & {
@@ -51,13 +53,25 @@ export function parseBoardListResponse(data: Partial<BoardListResponse> | null |
   );
 }
 
+export type QuotedPostBrief = {
+  id: string;
+  content: string;
+  author: CreatorBrief;
+};
+
 export type PostOut = {
   id: string;
   board_id: string;
   content: string;
   created_at: string;
   author: CreatorBrief;
+  quoted_post_id?: string | null;
+  quoted_post?: QuotedPostBrief | null;
 };
+
+export function authorLabel(author: CreatorBrief): string {
+  return author.nickname || author.email;
+}
 
 export type PostListResponse = {
   items: PostOut[];
@@ -65,6 +79,28 @@ export type PostListResponse = {
   skip: number;
   limit: number;
 };
+
+const DEFAULT_FETCH_TIMEOUT_MS = 15_000;
+
+/** 带超时的 fetch，避免 API 未启动时页面一直「加载中」 */
+export async function fetchApi(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  timeoutMs = DEFAULT_FETCH_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("请求超时，请确认本机 API 已启动（端口 8000）");
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
 
 export async function parseJson(res: Response): Promise<unknown> {
   const text = await res.text();

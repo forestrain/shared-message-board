@@ -18,6 +18,8 @@ from app.schemas.board import (
     BoardUpdate,
     PostBrief,
 )
+from app.schemas.common import QuotedPostBrief
+from app.services.post_present import truncate_preview
 
 router = APIRouter(prefix="/boards", tags=["boards"])
 
@@ -32,6 +34,23 @@ def _truncate_post_content(text: str, max_len: int = POST_BRIEF_MAX) -> str:
     return single_line[: max_len - 1] + "…"
 
 
+def _post_brief(post: Post) -> PostBrief:
+    quoted = None
+    if post.quoted_post_id and post.quoted_post is not None and post.quoted_post.deleted_at is None:
+        quoted = QuotedPostBrief(
+            id=post.quoted_post.id,
+            content=truncate_preview(post.quoted_post.content, max_len=POST_BRIEF_MAX),
+            author=post.quoted_post.author,
+        )
+    return PostBrief(
+        id=post.id,
+        content=_truncate_post_content(post.content),
+        author=post.author,
+        quoted_post_id=post.quoted_post_id,
+        quoted_post=quoted,
+    )
+
+
 def _recent_posts_by_board(
     db: Session, board_ids: list[uuid.UUID], per_board: int = 2
 ) -> dict[uuid.UUID, list[Post]]:
@@ -39,7 +58,10 @@ def _recent_posts_by_board(
         return {}
     rows = db.scalars(
         select(Post)
-        .options(joinedload(Post.author))
+        .options(
+            joinedload(Post.author),
+            joinedload(Post.quoted_post).joinedload(Post.author),
+        )
         .where(Post.board_id.in_(board_ids), Post.deleted_at.is_(None))
         .order_by(Post.created_at.desc())
     ).unique().all()
@@ -64,14 +86,7 @@ def list_public_boards(
     posts_map = _recent_posts_by_board(db, board_ids, per_board=2)
     items: list[BoardListItem] = []
     for board in rows:
-        briefs = [
-            PostBrief(
-                id=p.id,
-                content=_truncate_post_content(p.content),
-                author=p.author,
-            )
-            for p in posts_map.get(board.id, [])
-        ]
+        briefs = [_post_brief(p) for p in posts_map.get(board.id, [])]
         item = BoardListItem.model_validate(board)
         item.recent_posts = briefs
         items.append(item)

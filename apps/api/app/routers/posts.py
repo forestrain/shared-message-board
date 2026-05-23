@@ -13,9 +13,15 @@ from app.deps import get_current_user
 from app.deps_board import require_public_board
 from app.models import Board, Post, User
 from app.schemas.post import PostCreate, PostListResponse, PostOut
+from app.services.post_present import post_to_out
 
 board_posts_router = APIRouter(prefix="/boards/{board_id}/posts", tags=["posts"])
 posts_router = APIRouter(prefix="/posts", tags=["posts"])
+
+_POST_LOAD = (
+    joinedload(Post.author),
+    joinedload(Post.quoted_post).joinedload(Post.author),
+)
 
 
 @board_posts_router.get("", response_model=PostListResponse)
@@ -26,11 +32,7 @@ def list_posts(
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 30,
 ) -> PostListResponse:
-    base = (
-        select(Post)
-        .options(joinedload(Post.author))
-        .where(Post.board_id == board_id, Post.deleted_at.is_(None))
-    )
+    base = select(Post).options(*_POST_LOAD).where(Post.board_id == board_id, Post.deleted_at.is_(None))
     total = (
         db.scalar(
             select(func.count()).select_from(Post).where(Post.board_id == board_id, Post.deleted_at.is_(None))
@@ -38,7 +40,7 @@ def list_posts(
         or 0
     )
     rows = db.scalars(base.order_by(Post.created_at.desc()).offset(skip).limit(limit)).unique().all()
-    items = [PostOut.model_validate(p) for p in rows]
+    items = [post_to_out(p) for p in rows]
     return PostListResponse(items=items, total=int(total), skip=skip, limit=limit)
 
 
@@ -50,17 +52,28 @@ def create_post(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> PostOut:
+    quoted_id = body.quoted_post_id
+    if quoted_id is not None:
+        quoted = db.get(Post, quoted_id)
+        if (
+            quoted is None
+            or quoted.board_id != board_id
+            or quoted.deleted_at is not None
+        ):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="引用的留言不存在或已删除",
+            )
     post = Post(
         board_id=board_id,
         author_id=user.id,
         content=body.content.strip(),
+        quoted_post_id=quoted_id,
     )
     db.add(post)
     db.commit()
-    post = db.execute(
-        select(Post).options(joinedload(Post.author)).where(Post.id == post.id)
-    ).scalar_one()
-    return PostOut.model_validate(post)
+    post = db.execute(select(Post).options(*_POST_LOAD).where(Post.id == post.id)).scalar_one()
+    return post_to_out(post)
 
 
 @posts_router.delete("/{post_id}", status_code=status.HTTP_204_NO_CONTENT)

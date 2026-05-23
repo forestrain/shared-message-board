@@ -7,9 +7,11 @@ type AppLayoutProps = {
   children: React.ReactNode;
   /** 顶栏下方可选副标题 */
   tagline?: string;
+  /** accent：渐变底图，用于留言板详情等页面 */
+  headerTone?: "default" | "accent";
 };
 
-export default function AppLayout({ children, tagline }: AppLayoutProps) {
+export default function AppLayout({ children, tagline, headerTone = "default" }: AppLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { me, logout } = useAuth();
@@ -44,7 +46,9 @@ export default function AppLayout({ children, tagline }: AppLayoutProps) {
 
   return (
     <div className="app-shell">
-      <header className="app-header-frame">
+      <header
+        className={`app-header-frame${headerTone === "accent" ? " app-header-frame--accent" : ""}`}
+      >
         <div className="app-header-inner">
           <div className="app-brand">
             <h1 className="app-title">交换心声</h1>

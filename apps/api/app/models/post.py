@@ -22,8 +22,17 @@ class Post(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     content: Mapped[str] = mapped_column(Text())
+    quoted_post_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("posts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
     board: Mapped["Board"] = relationship("Board", back_populates="posts")
     author: Mapped["User"] = relationship("User", back_populates="posts_authored")
+    quoted_post: Mapped[Optional["Post"]] = relationship(
+        "Post",
+        remote_side=[id],
+        foreign_keys=[quoted_post_id],
+        uselist=False,
+    )

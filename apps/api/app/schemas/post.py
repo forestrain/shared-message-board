@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Optional
+
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.board import CreatorBrief
+from app.schemas.common import CreatorBrief, QuotedPostBrief
+
+__all__ = ["PostCreate", "PostOut", "PostListResponse", "QuotedPostBrief", "CreatorBrief"]
 
 
 class PostCreate(BaseModel):
     content: str = Field(..., min_length=1, max_length=2000)
+    quoted_post_id: Optional[uuid.UUID] = None
 
 
 class PostOut(BaseModel):
@@ -19,6 +24,8 @@ class PostOut(BaseModel):
     content: str
     created_at: datetime
     author: CreatorBrief
+    quoted_post_id: Optional[uuid.UUID] = None
+    quoted_post: Optional[QuotedPostBrief] = None
 
 
 class PostListResponse(BaseModel):

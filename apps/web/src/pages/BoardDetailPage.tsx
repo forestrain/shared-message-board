@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Button, Card, Divider, List, TextArea, Toast } from "antd-mobile";
+import { Button, Card, Divider, Input, Popup, TextArea, Toast } from "antd-mobile";
 import AppLayout from "../components/AppLayout";
 import { useAuth } from "../lib/AuthContext";
+import PostQuoteBlock from "../components/PostQuoteBlock";
 import type { BoardOut, PostListResponse, PostOut } from "../lib/api";
-import { formatApiError, parseJson } from "../lib/api";
+import { authorLabel, formatApiError, parseJson } from "../lib/api";
+import { resolveQuotedPost } from "../lib/postQuote";
 
 export default function BoardDetailPage() {
   const { boardId } = useParams<{ boardId: string }>();
@@ -14,6 +16,12 @@ export default function BoardDetailPage() {
   const [posts, setPosts] = useState<PostOut[]>([]);
   const [postTotal, setPostTotal] = useState(0);
   const [draft, setDraft] = useState("");
+  const [quotedPost, setQuotedPost] = useState<PostOut | null>(null);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [savingBoard, setSavingBoard] = useState(false);
   const [loadErr, setLoadErr] = useState<string | null>(null);
 
   const loadBoard = useCallback(async () => {
@@ -43,8 +51,82 @@ export default function BoardDetailPage() {
     void loadPosts();
   }, [loadBoard, loadPosts]);
 
+  const isOwner = Boolean(me && board && me.id === board.creator.id);
+
   const canDeletePost = (p: PostOut) =>
     me && (me.id === p.author.id || (board && me.id === board.creator.id));
+
+  const openEdit = () => {
+    if (!board) return;
+    setEditTitle(board.title);
+    setEditDesc(board.description ?? "");
+    setEditOpen(true);
+  };
+
+  const saveBoard = async () => {
+    if (!boardId || !board) return;
+    const title = editTitle.trim();
+    if (!title) {
+      Toast.show({ content: "标题不能为空" });
+      return;
+    }
+    setSavingBoard(true);
+    try {
+      const res = await fetch(`/api/v1/boards/${boardId}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, description: editDesc.trim() || null }),
+      });
+      const body = await parseJson(res);
+      if (!res.ok) {
+        Toast.show({ content: formatApiError(res, body) });
+        return;
+      }
+      setBoard(body as BoardOut);
+      setEditOpen(false);
+      Toast.show({ content: "已保存" });
+    } catch {
+      Toast.show({ content: "网络错误" });
+    } finally {
+      setSavingBoard(false);
+    }
+  };
+
+  const publishPost = async () => {
+    const c = draft.trim();
+    if (!c) {
+      Toast.show({ content: "请输入内容" });
+      return;
+    }
+    try {
+      const payload: { content: string; quoted_post_id?: string } = { content: c };
+      if (quotedPost) payload.quoted_post_id = quotedPost.id;
+      const res = await fetch(`/api/v1/boards/${boardId}/posts`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await parseJson(res);
+      if (!res.ok) {
+        Toast.show({ content: formatApiError(res, body) });
+        return;
+      }
+      Toast.show({ content: "已发布" });
+      setDraft("");
+      setQuotedPost(null);
+      await loadPosts();
+    } catch {
+      Toast.show({ content: "网络错误" });
+    }
+  };
+
+  const selectMention = (p: PostOut) => {
+    setQuotedPost(p);
+    setMentionOpen(false);
+    Toast.show({ content: `已引用 @${authorLabel(p.author)} 的留言` });
+  };
 
   if (!boardId) {
     return (
@@ -74,15 +156,22 @@ export default function BoardDetailPage() {
   }
 
   return (
-    <AppLayout tagline={board.title}>
-      <button type="button" className="back-link" onClick={() => navigate(-1)}>
+    <AppLayout tagline={board.title} headerTone="accent">
+      <button type="button" className="back-link back-link--on-accent" onClick={() => navigate(-1)}>
         ← 返回
       </button>
 
-      <Card className="page-card">
-        <h2 className="page-card-title">{board.title}</h2>
+      <Card className="page-card board-detail-card">
+        <div className="board-detail-head">
+          <h2 className="page-card-title">{board.title}</h2>
+          {isOwner ? (
+            <Button size="small" fill="outline" className="board-edit-btn" onClick={openEdit}>
+              编辑
+            </Button>
+          ) : null}
+        </div>
         <p className="board-meta">
-          {board.creator.nickname || board.creator.email} · {new Date(board.created_at).toLocaleString("zh-CN")}
+          {authorLabel(board.creator)} · {new Date(board.created_at).toLocaleString("zh-CN")}
         </p>
         <div className="board-desc">{board.description || "（无描述）"}</div>
       </Card>
@@ -110,6 +199,20 @@ export default function BoardDetailPage() {
           </div>
         ) : (
           <>
+            {quotedPost ? (
+              <div className="mention-chip">
+                <div className="mention-chip-main">
+                  <span className="mention-chip-label">引用</span>
+                  <span className="mention-chip-text">
+                    @{authorLabel(quotedPost.author)}：{quotedPost.content.slice(0, 60)}
+                    {quotedPost.content.length > 60 ? "…" : ""}
+                  </span>
+                </div>
+                <button type="button" className="mention-chip-clear" onClick={() => setQuotedPost(null)}>
+                  取消
+                </button>
+              </div>
+            ) : null}
             <TextArea
               placeholder="写点什么…（1～2000 字）"
               value={draft}
@@ -118,60 +221,46 @@ export default function BoardDetailPage() {
               maxLength={2000}
               showCount
             />
-            <Button
-              block
-              color="primary"
-              className="publish-btn"
-              onClick={async () => {
-                const c = draft.trim();
-                if (!c) {
-                  Toast.show({ content: "请输入内容" });
-                  return;
-                }
-                try {
-                  const res = await fetch(`/api/v1/boards/${boardId}/posts`, {
-                    method: "POST",
-                    credentials: "include",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ content: c }),
-                  });
-                  const body = await parseJson(res);
-                  if (!res.ok) {
-                    Toast.show({ content: formatApiError(res, body) });
-                    return;
-                  }
-                  Toast.show({ content: "已发布" });
-                  setDraft("");
-                  await loadPosts();
-                } catch {
-                  Toast.show({ content: "网络错误" });
-                }
-              }}
-            >
-              发布
-            </Button>
+            <div className="compose-actions">
+              <Button
+                size="small"
+                fill="outline"
+                disabled={posts.length === 0}
+                onClick={() => setMentionOpen(true)}
+              >
+                @引用留言
+              </Button>
+              <Button block color="primary" className="publish-btn-inline" onClick={() => void publishPost()}>
+                发布
+              </Button>
+            </div>
             <Divider className="section-divider" />
           </>
         )}
 
-        <List className="post-list">
-          {posts.length === 0 ? (
-            <div className="empty-hint">还没有帖子，来做第一条吧。</div>
-          ) : (
-            posts.map((p) => (
-              <List.Item
+        {posts.length === 0 ? (
+          <div className="empty-hint">还没有帖子，来做第一条吧。</div>
+        ) : (
+          <ul className="post-feed">
+            {posts.map((p) => {
+              const quote = resolveQuotedPost(p, posts);
+              return (
+              <li
                 key={p.id}
-                className="post-list-item"
-                title={<span className="post-content">{p.content}</span>}
-                description={`${p.author.nickname || p.author.email} · ${new Date(p.created_at).toLocaleString("zh-CN")}`}
-                extra={
-                  canDeletePost(p) ? (
+                className={`post-feed-item${quote ? " post-feed-item--has-quote" : ""}`}
+              >
+                {quote ? <PostQuoteBlock quote={quote} /> : null}
+                <p className="post-feed-body">{p.content}</p>
+                <div className="post-feed-footer">
+                  <span className="post-feed-meta">
+                    {authorLabel(p.author)} · {new Date(p.created_at).toLocaleString("zh-CN")}
+                  </span>
+                  {canDeletePost(p) ? (
                     <Button
                       size="mini"
                       color="danger"
                       fill="outline"
-                      onClick={async (e) => {
-                        e.stopPropagation();
+                      onClick={async () => {
                         if (!window.confirm("确定删除这条帖子？")) return;
                         try {
                           const res = await fetch(`/api/v1/posts/${p.id}`, {
@@ -184,6 +273,7 @@ export default function BoardDetailPage() {
                             return;
                           }
                           Toast.show({ content: "已删除" });
+                          if (quotedPost?.id === p.id) setQuotedPost(null);
                           await loadPosts();
                         } catch {
                           Toast.show({ content: "网络错误" });
@@ -192,13 +282,78 @@ export default function BoardDetailPage() {
                     >
                       删
                     </Button>
-                  ) : null
-                }
-              />
-            ))
-          )}
-        </List>
+                  ) : null}
+                </div>
+              </li>
+            );
+            })}
+          </ul>
+        )}
       </Card>
+
+      <Popup
+        visible={editOpen}
+        onMaskClick={() => setEditOpen(false)}
+        position="bottom"
+        bodyStyle={{ borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16 }}
+      >
+        <h3 className="popup-title">编辑留言板</h3>
+        <FormField label="标题">
+          <Input value={editTitle} onChange={setEditTitle} placeholder="留言板名称" maxLength={200} />
+        </FormField>
+        <FormField label="描述">
+          <TextArea
+            value={editDesc}
+            onChange={setEditDesc}
+            placeholder="介绍一下这块板（可选）"
+            rows={3}
+            maxLength={8000}
+            showCount
+          />
+        </FormField>
+        <div className="popup-actions">
+          <Button fill="outline" onClick={() => setEditOpen(false)}>
+            取消
+          </Button>
+          <Button color="primary" loading={savingBoard} onClick={() => void saveBoard()}>
+            保存
+          </Button>
+        </div>
+      </Popup>
+
+      <Popup
+        visible={mentionOpen}
+        onMaskClick={() => setMentionOpen(false)}
+        position="bottom"
+        bodyStyle={{
+          borderTopLeftRadius: 16,
+          borderTopRightRadius: 16,
+          padding: 16,
+          maxHeight: "70vh",
+          overflow: "auto",
+        }}
+      >
+        <h3 className="popup-title">选择要引用的留言</h3>
+        <ul className="mention-picker-list">
+          {posts.map((p) => (
+            <li key={p.id}>
+              <button type="button" className="mention-picker-item" onClick={() => selectMention(p)}>
+                <span className="mention-picker-author">@{authorLabel(p.author)}</span>
+                <span className="mention-picker-preview">{p.content}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Popup>
     </AppLayout>
+  );
+}
+
+function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="form-field">
+      <span className="form-field-label">{label}</span>
+      {children}
+    </label>
   );
 }

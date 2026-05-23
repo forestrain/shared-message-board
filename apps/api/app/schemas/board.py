@@ -6,13 +6,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
-class CreatorBrief(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    email: str
-    nickname: Optional[str]
+from app.schemas.common import CreatorBrief, QuotedPostBrief
 
 
 class BoardCreate(BaseModel):
@@ -43,6 +37,8 @@ class PostBrief(BaseModel):
     id: uuid.UUID
     content: str
     author: CreatorBrief
+    quoted_post_id: Optional[uuid.UUID] = None
+    quoted_post: Optional[QuotedPostBrief] = None
 
 
 class BoardListItem(BoardOut):

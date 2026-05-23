@@ -4,7 +4,8 @@ import { Button, Card, Divider, Form, Input, Toast } from "antd-mobile";
 import AppLayout from "../components/AppLayout";
 import { useAuth } from "../lib/AuthContext";
 import type { BoardListItem, BoardListResponse } from "../lib/api";
-import { formatApiError, parseBoardListResponse, parseJson } from "../lib/api";
+import { fetchApi, formatApiError, parseBoardListResponse, parseJson } from "../lib/api";
+import PostQuoteBlock from "../components/PostQuoteBlock";
 import { getBoardListPreviews } from "../lib/boardPreviews";
 
 export default function HomePage() {
@@ -19,13 +20,14 @@ export default function HomePage() {
   const refreshBoards = useCallback(async () => {
     setLoadingBoards(true);
     try {
-      const res = await fetch("/api/v1/boards?skip=0&limit=50", { credentials: "include" });
+      const res = await fetchApi("/api/v1/boards?skip=0&limit=50", { credentials: "include" });
       if (!res.ok) return;
       const data = (await parseJson(res)) as BoardListResponse;
       setBoards(parseBoardListResponse(data));
       setBoardTotal(data.total ?? 0);
-    } catch {
-      /* ignore */
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "加载失败";
+      Toast.show({ content: msg });
     } finally {
       setLoadingBoards(false);
     }
@@ -36,7 +38,7 @@ export default function HomePage() {
   }, [refreshBoards]);
 
   return (
-    <AppLayout>
+    <AppLayout headerTone="accent">
       <section className="hero-banner">
         <h2 className="hero-title">公开广场</h2>
         <p className="hero-desc">浏览大家的留言板，登录后可以创建自己的板并发帖。</p>
@@ -85,11 +87,14 @@ export default function HomePage() {
                     {previewLines.map((line) => (
                       <li
                         key={line.id}
-                        className={`board-preview-line${line.pinned ? " board-preview-line--pinned" : ""}`}
+                        className={`board-preview-line${line.pinned ? " board-preview-line--pinned" : ""}${line.quotedPost ? " board-preview-line--has-quote" : ""}`}
                       >
                         {line.pinned ? <span className="board-preview-pin">置顶</span> : null}
-                        <span className="board-preview-author">{line.authorLabel}：</span>
-                        {line.content}
+                        {line.quotedPost ? <PostQuoteBlock quote={line.quotedPost} compact /> : null}
+                        <p className="board-preview-text">
+                          <span className="board-preview-author">{line.authorLabel}：</span>
+                          {line.content}
+                        </p>
                       </li>
                     ))}
                   </ul>

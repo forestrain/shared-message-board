@@ -4,7 +4,7 @@ import { Button, Card, Form, Input, Toast } from "antd-mobile";
 import AppLayout from "../components/AppLayout";
 import { useAuth } from "../lib/AuthContext";
 import type { UserPublic } from "../lib/api";
-import { formatApiError, parseJson } from "../lib/api";
+import { fetchApi, formatApiError, parseJson } from "../lib/api";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -21,7 +21,7 @@ export default function LoginPage() {
     }
     setSubmitting(true);
     try {
-      const res = await fetch("/api/v1/auth/login", {
+      const res = await fetchApi("/api/v1/auth/login", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -35,8 +35,9 @@ export default function LoginPage() {
       setMe(body as UserPublic);
       Toast.show({ content: "登录成功" });
       navigate("/");
-    } catch {
-      Toast.show({ content: "网络错误，请检查 API 是否已启动" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "网络错误，请检查 API 是否已启动";
+      Toast.show({ content: msg });
     } finally {
       setSubmitting(false);
     }
