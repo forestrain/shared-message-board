@@ -5,7 +5,7 @@ import AppLayout from "../components/AppLayout";
 import { useAuth } from "../lib/AuthContext";
 import PostQuoteBlock from "../components/PostQuoteBlock";
 import type { BoardOut, PostListResponse, PostOut } from "../lib/api";
-import { authorLabel, formatApiError, parseJson } from "../lib/api";
+import { authorLabel, fetchApi, formatApiError, parseJson } from "../lib/api";
 import { resolveQuotedPost } from "../lib/postQuote";
 
 export default function BoardDetailPage() {
@@ -52,6 +52,7 @@ export default function BoardDetailPage() {
   }, [loadBoard, loadPosts]);
 
   const isOwner = Boolean(me && board && me.id === board.creator.id);
+  const pinnedCount = posts.filter((p) => p.pinned_at).length;
 
   const canDeletePost = (p: PostOut) =>
     me && (me.id === p.author.id || (board && me.id === board.creator.id));
@@ -119,6 +120,25 @@ export default function BoardDetailPage() {
       await loadPosts();
     } catch {
       Toast.show({ content: "网络错误" });
+    }
+  };
+
+  const togglePin = async (p: PostOut, pin: boolean) => {
+    try {
+      const res = await fetchApi(`/api/v1/posts/${p.id}/pin`, {
+        method: pin ? "POST" : "DELETE",
+        credentials: "include",
+      });
+      const body = await parseJson(res);
+      if (!res.ok) {
+        Toast.show({ content: formatApiError(res, body) });
+        return;
+      }
+      Toast.show({ content: pin ? "已置顶" : "已取消置顶" });
+      await loadPosts();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "操作失败";
+      Toast.show({ content: msg });
     }
   };
 
@@ -244,18 +264,41 @@ export default function BoardDetailPage() {
           <ul className="post-feed">
             {posts.map((p) => {
               const quote = resolveQuotedPost(p, posts);
+              const isPinned = Boolean(p.pinned_at);
               return (
               <li
                 key={p.id}
-                className={`post-feed-item${quote ? " post-feed-item--has-quote" : ""}`}
+                className={`post-feed-item${isPinned ? " post-feed-item--pinned" : ""}${quote ? " post-feed-item--has-quote" : ""}`}
               >
+                {isPinned ? <span className="post-feed-pin-badge">置顶</span> : null}
                 {quote ? <PostQuoteBlock quote={quote} /> : null}
                 <p className="post-feed-body">{p.content}</p>
                 <div className="post-feed-footer">
                   <span className="post-feed-meta">
                     {authorLabel(p.author)} · {new Date(p.created_at).toLocaleString("zh-CN")}
                   </span>
-                  {canDeletePost(p) ? (
+                  <div className="post-feed-actions">
+                    {isOwner ? (
+                      isPinned ? (
+                        <Button
+                          size="mini"
+                          fill="outline"
+                          onClick={() => void togglePin(p, false)}
+                        >
+                          取消置顶
+                        </Button>
+                      ) : pinnedCount < 2 ? (
+                        <Button
+                          size="mini"
+                          color="primary"
+                          fill="outline"
+                          onClick={() => void togglePin(p, true)}
+                        >
+                          置顶
+                        </Button>
+                      ) : null
+                    ) : null}
+                    {canDeletePost(p) ? (
                     <Button
                       size="mini"
                       color="danger"
@@ -283,6 +326,7 @@ export default function BoardDetailPage() {
                       删
                     </Button>
                   ) : null}
+                  </div>
                 </div>
               </li>
             );

@@ -84,6 +84,9 @@ export default function HomePage() {
                     {new Date(b.created_at).toLocaleString("zh-CN")}
                   </p>
                   <ul className="board-preview-list">
+                    {previewLines.length === 0 ? (
+                      <li className="board-preview-empty">暂无留言</li>
+                    ) : null}
                     {previewLines.map((line) => (
                       <li
                         key={line.id}

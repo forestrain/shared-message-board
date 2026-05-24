@@ -48,7 +48,50 @@ def _post_brief(post: Post) -> PostBrief:
         author=post.author,
         quoted_post_id=post.quoted_post_id,
         quoted_post=quoted,
+        pinned_at=post.pinned_at,
     )
+
+
+_POST_PREVIEW_LOAD = (
+    joinedload(Post.author),
+    joinedload(Post.quoted_post).joinedload(Post.author),
+)
+
+
+def _preview_posts_for_board(db: Session, board_id: uuid.UUID, limit: int = 2) -> list[Post]:
+    """首页摘要：先置顶（最多 limit 条），不足则用最新非置顶帖补齐。"""
+    pinned = list(
+        db.scalars(
+            select(Post)
+            .options(*_POST_PREVIEW_LOAD)
+            .where(
+                Post.board_id == board_id,
+                Post.deleted_at.is_(None),
+                Post.pinned_at.is_not(None),
+            )
+            .order_by(Post.pinned_at.desc())
+            .limit(limit)
+        ).unique().all()
+    )
+    if len(pinned) >= limit:
+        return pinned
+    pinned_ids = [p.id for p in pinned]
+    remaining = limit - len(pinned)
+    q = (
+        select(Post)
+        .options(*_POST_PREVIEW_LOAD)
+        .where(
+            Post.board_id == board_id,
+            Post.deleted_at.is_(None),
+            Post.pinned_at.is_(None),
+        )
+        .order_by(Post.created_at.desc())
+        .limit(remaining)
+    )
+    if pinned_ids:
+        q = q.where(Post.id.not_in(pinned_ids))
+    recent = list(db.scalars(q).unique().all())
+    return pinned + recent
 
 
 def _recent_posts_by_board(
@@ -56,21 +99,7 @@ def _recent_posts_by_board(
 ) -> dict[uuid.UUID, list[Post]]:
     if not board_ids:
         return {}
-    rows = db.scalars(
-        select(Post)
-        .options(
-            joinedload(Post.author),
-            joinedload(Post.quoted_post).joinedload(Post.author),
-        )
-        .where(Post.board_id.in_(board_ids), Post.deleted_at.is_(None))
-        .order_by(Post.created_at.desc())
-    ).unique().all()
-    grouped: dict[uuid.UUID, list[Post]] = {}
-    for post in rows:
-        bucket = grouped.setdefault(post.board_id, [])
-        if len(bucket) < per_board:
-            bucket.append(post)
-    return grouped
+    return {bid: _preview_posts_for_board(db, bid, per_board) for bid in board_ids}
 
 
 @router.get("", response_model=BoardListResponse)

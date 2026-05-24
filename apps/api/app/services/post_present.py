@@ -30,4 +30,5 @@ def post_to_out(post: Post) -> PostOut:
         author=post.author,
         quoted_post_id=post.quoted_post_id,
         quoted_post=quoted,
+        pinned_at=post.pinned_at,
     )

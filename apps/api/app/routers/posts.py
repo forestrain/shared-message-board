@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, nulls_last, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -13,6 +13,7 @@ from app.deps import get_current_user
 from app.deps_board import require_public_board
 from app.models import Board, Post, User
 from app.schemas.post import PostCreate, PostListResponse, PostOut
+from app.services.post_pin import get_mutable_post, pin_post, unpin_post
 from app.services.post_present import post_to_out
 
 board_posts_router = APIRouter(prefix="/boards/{board_id}/posts", tags=["posts"])
@@ -39,7 +40,11 @@ def list_posts(
         )
         or 0
     )
-    rows = db.scalars(base.order_by(Post.created_at.desc()).offset(skip).limit(limit)).unique().all()
+    rows = db.scalars(
+        base.order_by(nulls_last(Post.pinned_at.desc()), Post.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    ).unique().all()
     items = [post_to_out(p) for p in rows]
     return PostListResponse(items=items, total=int(total), skip=skip, limit=limit)
 
@@ -74,6 +79,43 @@ def create_post(
     db.commit()
     post = db.execute(select(Post).options(*_POST_LOAD).where(Post.id == post.id)).scalar_one()
     return post_to_out(post)
+
+
+def _load_post_out(db: Session, post_id: uuid.UUID) -> PostOut:
+    post = db.execute(select(Post).options(*_POST_LOAD).where(Post.id == post_id)).scalar_one()
+    return post_to_out(post)
+
+
+@posts_router.post("/{post_id}/pin", response_model=PostOut)
+def pin_board_post(
+    post_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> PostOut:
+    post = get_mutable_post(db, post_id)
+    if post is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Post not found")
+    board = db.get(Board, post.board_id)
+    if board is None or board.visibility != "public":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Post not found")
+    pin_post(db, post, board, user)
+    return _load_post_out(db, post_id)
+
+
+@posts_router.delete("/{post_id}/pin", response_model=PostOut)
+def unpin_board_post(
+    post_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> PostOut:
+    post = get_mutable_post(db, post_id)
+    if post is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Post not found")
+    board = db.get(Board, post.board_id)
+    if board is None or board.visibility != "public":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Post not found")
+    unpin_post(db, post, board, user)
+    return _load_post_out(db, post_id)
 
 
 @posts_router.delete("/{post_id}", status_code=status.HTTP_204_NO_CONTENT)

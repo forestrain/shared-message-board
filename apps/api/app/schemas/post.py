@@ -26,6 +26,7 @@ class PostOut(BaseModel):
     author: CreatorBrief
     quoted_post_id: Optional[uuid.UUID] = None
     quoted_post: Optional[QuotedPostBrief] = None
+    pinned_at: Optional[datetime] = None
 
 
 class PostListResponse(BaseModel):

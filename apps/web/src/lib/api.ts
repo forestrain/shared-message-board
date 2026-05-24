@@ -25,6 +25,7 @@ export type PostBrief = {
   author: CreatorBrief;
   quoted_post_id?: string | null;
   quoted_post?: QuotedPostBrief | null;
+  pinned_at?: string | null;
 };
 
 export type BoardListItem = BoardOut & {
@@ -67,6 +68,7 @@ export type PostOut = {
   author: CreatorBrief;
   quoted_post_id?: string | null;
   quoted_post?: QuotedPostBrief | null;
+  pinned_at?: string | null;
 };
 
 export function authorLabel(author: CreatorBrief): string {
