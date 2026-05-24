@@ -37,11 +37,33 @@ export default function HomePage() {
     void refreshBoards();
   }, [refreshBoards]);
 
+  const moveBoardOrder = async (boardId: string, direction: "up" | "down") => {
+    try {
+      const res = await fetchApi(`/api/v1/boards/${boardId}/order/move`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ direction }),
+      });
+      if (!res.ok) {
+        const body = await parseJson(res);
+        Toast.show({ content: formatApiError(res, body) });
+        return;
+      }
+      await refreshBoards();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "调整顺序失败";
+      Toast.show({ content: msg });
+    }
+  };
+
   return (
     <AppLayout headerTone="accent">
       <section className="hero-banner">
         <h2 className="hero-title">公开广场</h2>
-        <p className="hero-desc">浏览大家的留言板，登录后可以创建自己的板并发帖。</p>
+        <p className="hero-desc">
+          浏览大家的留言板，登录后可创建留言板、调整列表顺序并发帖。
+        </p>
       </section>
 
       <Card
@@ -64,10 +86,38 @@ export default function HomePage() {
           <div className="empty-hint">暂无留言板。登录后可在下方创建第一块板。</div>
         ) : (
           <ul className="board-list">
-            {boards.map((b) => {
+            {boards.map((b, index) => {
               const previewLines = getBoardListPreviews(b);
               return (
-              <li key={b.id}>
+              <li key={b.id} className="board-list-row">
+                {me ? (
+                  <div className="board-sort-col">
+                    <button
+                      type="button"
+                      className="board-sort-btn"
+                      disabled={index === 0}
+                      aria-label="上移"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void moveBoardOrder(b.id, "up");
+                      }}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="board-sort-btn"
+                      disabled={index === boards.length - 1}
+                      aria-label="下移"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void moveBoardOrder(b.id, "down");
+                      }}
+                    >
+                      ↓
+                    </button>
+                  </div>
+                ) : null}
                 <button
                   type="button"
                   className="board-list-item"

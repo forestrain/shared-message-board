@@ -51,3 +51,7 @@ class BoardListResponse(BaseModel):
     total: int
     skip: int
     limit: int
+
+
+class BoardOrderMove(BaseModel):
+    direction: Literal["up", "down"]

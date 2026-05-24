@@ -33,3 +33,24 @@ def get_current_user(
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     return user
+
+
+def get_optional_user(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> User | None:
+    name = settings.session_cookie_name
+    raw = request.cookies.get(name)
+    if raw is None:
+        return None
+    try:
+        sid = uuid.UUID(raw)
+    except ValueError:
+        return None
+
+    row = db.get(AuthSession, sid)
+    now = datetime.now(timezone.utc)
+    if row is None or row.expires_at <= now:
+        return None
+
+    return db.get(User, row.user_id)

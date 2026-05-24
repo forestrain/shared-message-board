@@ -271,6 +271,47 @@ body {
   gap: 10px;
 }
 
+.board-list-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.board-sort-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.board-sort-btn {
+  width: 36px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--color-primary-dark);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.board-sort-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.board-sort-btn:not(:disabled):active {
+  background: rgba(61, 122, 150, 0.1);
+}
+
+.board-list-row .board-list-item {
+  flex: 1;
+  min-width: 0;
+}
+
 .board-list-item {
   width: 100%;
   text-align: left;

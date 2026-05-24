@@ -1,23 +1,25 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, get_optional_user
 from app.models import Board, Post, User
 from app.schemas.board import (
     BoardCreate,
     BoardListItem,
     BoardListResponse,
+    BoardOrderMove,
     BoardOut,
     BoardUpdate,
     PostBrief,
 )
+from app.services.board_order import move_board_in_user_list, sorted_public_boards
 from app.schemas.common import QuotedPostBrief
 from app.services.post_present import truncate_preview
 
@@ -105,12 +107,13 @@ def _recent_posts_by_board(
 @router.get("", response_model=BoardListResponse)
 def list_public_boards(
     db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> BoardListResponse:
-    base = select(Board).options(joinedload(Board.creator)).where(Board.visibility == PUBLIC)
-    total = db.scalar(select(func.count()).select_from(Board).where(Board.visibility == PUBLIC)) or 0
-    rows = db.scalars(base.order_by(Board.created_at.desc()).offset(skip).limit(limit)).unique().all()
+    all_boards = sorted_public_boards(db, user)
+    total = len(all_boards)
+    rows = all_boards[skip : skip + limit]
     board_ids = [b.id for b in rows]
     posts_map = _recent_posts_by_board(db, board_ids, per_board=2)
     items: list[BoardListItem] = []
@@ -142,6 +145,16 @@ def create_board(
         select(Board).options(joinedload(Board.creator)).where(Board.id == board.id)
     ).scalar_one()
     return BoardOut.model_validate(board)
+
+
+@router.post("/{board_id}/order/move", status_code=status.HTTP_204_NO_CONTENT)
+def move_board_order(
+    board_id: uuid.UUID,
+    body: BoardOrderMove,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> None:
+    move_board_in_user_list(db, user, board_id, body.direction)
 
 
 @router.get("/{board_id}", response_model=BoardOut)
