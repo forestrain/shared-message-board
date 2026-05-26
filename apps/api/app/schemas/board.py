@@ -42,6 +42,7 @@ class PostBrief(BaseModel):
 
     id: uuid.UUID
     content: str
+    image_url: Optional[str] = None
     author: CreatorBrief
     quoted_post_id: Optional[uuid.UUID] = None
     quoted_post: Optional[QuotedPostBrief] = None

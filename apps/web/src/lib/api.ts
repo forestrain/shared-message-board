@@ -23,6 +23,7 @@ export type BoardOut = {
 export type PostBrief = {
   id: string;
   content: string;
+  image_url?: string | null;
   author: CreatorBrief;
   quoted_post_id?: string | null;
   quoted_post?: QuotedPostBrief | null;
@@ -65,6 +66,7 @@ export type PostOut = {
   id: string;
   board_id: string;
   content: string;
+  image_url?: string | null;
   created_at: string;
   author: CreatorBrief;
   quoted_post_id?: string | null;

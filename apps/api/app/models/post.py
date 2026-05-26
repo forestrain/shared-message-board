@@ -22,6 +22,7 @@ class Post(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     content: Mapped[str] = mapped_column(Text())
+    image_url: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     quoted_post_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("posts.id", ondelete="SET NULL"), nullable=True, index=True
     )

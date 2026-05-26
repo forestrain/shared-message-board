@@ -26,6 +26,7 @@ def post_to_out(post: Post) -> PostOut:
         id=post.id,
         board_id=post.board_id,
         content=post.content,
+        image_url=post.image_url,
         created_at=post.created_at,
         author=post.author,
         quoted_post_id=post.quoted_post_id,

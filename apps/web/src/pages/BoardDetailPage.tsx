@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button, Card, Divider, Input, Popup, TextArea, Toast } from "antd-mobile";
 import AppLayout from "../components/AppLayout";
 import { useAuth } from "../lib/AuthContext";
+import PostImage from "../components/PostImage";
 import PostQuoteBlock from "../components/PostQuoteBlock";
 import type { BoardOut, PostListResponse, PostOut } from "../lib/api";
 import { authorLabel, fetchApi, formatApiError, parseJson } from "../lib/api";
@@ -16,6 +17,9 @@ export default function BoardDetailPage() {
   const [posts, setPosts] = useState<PostOut[]>([]);
   const [postTotal, setPostTotal] = useState(0);
   const [draft, setDraft] = useState("");
+  const [pendingImage, setPendingImage] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [quotedPost, setQuotedPost] = useState<PostOut | null>(null);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -140,15 +144,62 @@ export default function BoardDetailPage() {
     }
   };
 
+  const clearPendingImage = () => {
+    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+    setPendingImage(null);
+    setImagePreviewUrl(null);
+    if (imageInputRef.current) imageInputRef.current.value = "";
+  };
+
+  const onPickImage = (file: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      Toast.show({ content: "请选择图片文件" });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      Toast.show({ content: "图片不能超过 2MB" });
+      return;
+    }
+    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+    setPendingImage(file);
+    setImagePreviewUrl(URL.createObjectURL(file));
+  };
+
+  const uploadPendingImage = async (): Promise<string | null> => {
+    if (!pendingImage) return null;
+    const form = new FormData();
+    form.append("file", pendingImage);
+    const res = await fetchApi("/api/v1/uploads/image", {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    });
+    const body = await parseJson(res);
+    if (!res.ok) {
+      Toast.show({ content: formatApiError(res, body) });
+      return null;
+    }
+    return (body as { url: string }).url;
+  };
+
   const publishPost = async () => {
     const c = draft.trim();
-    if (!c) {
-      Toast.show({ content: "请输入内容" });
+    if (!c && !pendingImage) {
+      Toast.show({ content: "请输入文字或添加图片" });
       return;
     }
     try {
-      const payload: { content: string; quoted_post_id?: string } = { content: c };
+      let imageUrl: string | null = null;
+      if (pendingImage) {
+        imageUrl = await uploadPendingImage();
+        if (!imageUrl) return;
+      }
+      const payload: { content: string; quoted_post_id?: string; image_url?: string } = {
+        content: c,
+      };
       if (quotedPost) payload.quoted_post_id = quotedPost.id;
+      if (imageUrl) payload.image_url = imageUrl;
       const res = await fetch(`/api/v1/boards/${boardId}/posts`, {
         method: "POST",
         credentials: "include",
@@ -163,6 +214,7 @@ export default function BoardDetailPage() {
       Toast.show({ content: "已发布" });
       setDraft("");
       setQuotedPost(null);
+      clearPendingImage();
       await loadPosts();
     } catch {
       Toast.show({ content: "网络错误" });
@@ -288,14 +340,32 @@ export default function BoardDetailPage() {
               </div>
             ) : null}
             <TextArea
-              placeholder="写点什么…（1～2000 字）"
+              placeholder="写点什么…（文字与图片至少一项，最多 2000 字）"
               value={draft}
               onChange={setDraft}
               rows={3}
               maxLength={2000}
               showCount
             />
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="compose-image-input"
+              onChange={(e) => onPickImage(e.target.files?.[0] ?? null)}
+            />
+            {imagePreviewUrl ? (
+              <div className="compose-image-preview">
+                <img src={imagePreviewUrl} alt="待发布图片预览" className="compose-image-preview-img" />
+                <button type="button" className="compose-image-remove" onClick={clearPendingImage}>
+                  移除图片
+                </button>
+              </div>
+            ) : null}
             <div className="compose-actions">
+              <Button size="small" fill="outline" onClick={() => imageInputRef.current?.click()}>
+                添加图片
+              </Button>
               <Button
                 size="small"
                 fill="outline"
@@ -326,7 +396,8 @@ export default function BoardDetailPage() {
               >
                 {isPinned ? <span className="post-feed-pin-badge">置顶</span> : null}
                 {quote ? <PostQuoteBlock quote={quote} /> : null}
-                <p className="post-feed-body">{p.content}</p>
+                {p.content.trim() ? <p className="post-feed-body">{p.content}</p> : null}
+                {p.image_url ? <PostImage src={p.image_url} /> : null}
                 <div className="post-feed-footer">
                   <span className="post-feed-meta">
                     {authorLabel(p.author)} · {new Date(p.created_at).toLocaleString("zh-CN")}

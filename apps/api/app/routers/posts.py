@@ -14,6 +14,7 @@ from app.deps_board import require_board_read, require_board_write
 from app.models import Board, Post, User
 from app.schemas.post import PostCreate, PostListResponse, PostOut
 from app.services.board_access import user_can_write_board
+from app.services.media import normalize_image_url
 from app.services.post_pin import get_mutable_post, pin_post, unpin_post
 from app.services.post_present import post_to_out
 
@@ -70,10 +71,12 @@ def create_post(
                 status.HTTP_400_BAD_REQUEST,
                 detail="引用的留言不存在或已删除",
             )
+    image_url = normalize_image_url(body.image_url)
     post = Post(
         board_id=board_id,
         author_id=user.id,
         content=body.content.strip(),
+        image_url=image_url,
         quoted_post_id=quoted_id,
     )
     db.add(post)

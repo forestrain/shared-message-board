@@ -13,5 +13,8 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
 
+    upload_dir: str = "uploads"
+    upload_max_bytes: int = 2 * 1024 * 1024
+
 
 settings = Settings()

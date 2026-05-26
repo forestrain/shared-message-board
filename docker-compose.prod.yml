@@ -32,6 +32,9 @@ services:
       SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-7}
       SESSION_SECURE: ${SESSION_SECURE:-false}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://127.0.0.1}
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - uploads_data:/data/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -57,6 +60,8 @@ services:
     restart: unless-stopped
     ports:
       - "${HTTP_PORT:-8080}:80"
+    volumes:
+      - uploads_data:/data/uploads:ro
     depends_on:
       api:
         condition: service_healthy
@@ -65,6 +70,7 @@ services:
 
 volumes:
   pgdata:
+  uploads_data:
 
 networks:
   appnet:

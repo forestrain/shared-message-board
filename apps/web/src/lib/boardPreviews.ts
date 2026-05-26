@@ -21,10 +21,12 @@ function briefToPreviewLine(p: PostBrief, allBriefs: PostBrief[]): BoardPreviewL
       };
     }
   }
+  const text = p.content.trim();
+  const content = text || (p.image_url ? "[图片]" : "");
   return {
     id: p.id,
     authorLabel: authorLabel(p.author),
-    content: p.content,
+    content,
     quotedPost,
     pinned: Boolean(p.pinned_at),
   };

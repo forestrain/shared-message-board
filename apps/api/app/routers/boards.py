@@ -46,9 +46,13 @@ def _post_brief(post: Post) -> PostBrief:
             content=truncate_preview(post.quoted_post.content, max_len=POST_BRIEF_MAX),
             author=post.quoted_post.author,
         )
+    preview = _truncate_post_content(post.content) if post.content.strip() else ""
+    if not preview and post.image_url:
+        preview = "[图片]"
     return PostBrief(
         id=post.id,
-        content=_truncate_post_content(post.content),
+        content=preview,
+        image_url=post.image_url,
         author=post.author,
         quoted_post_id=post.quoted_post_id,
         quoted_post=quoted,

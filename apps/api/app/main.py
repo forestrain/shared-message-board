@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.staticfiles import StaticFiles
 from starlette.responses import HTMLResponse
 
 from app.config import settings
-from app.routers import auth, boards, health, posts, users
+from app.routers import auth, boards, health, posts, uploads, users
+from app.services.media import upload_root
 
 app = FastAPI(title="交换心声 API", version="0.1.0", docs_url=None)
 
@@ -23,6 +25,10 @@ app.include_router(users.router, prefix="/api/v1")
 app.include_router(boards.router, prefix="/api/v1")
 app.include_router(posts.board_posts_router, prefix="/api/v1")
 app.include_router(posts.posts_router, prefix="/api/v1")
+app.include_router(uploads.router, prefix="/api/v1")
+
+_upload_dir = upload_root()
+app.mount("/uploads", StaticFiles(directory=str(_upload_dir)), name="uploads")
 
 
 @app.get("/docs", include_in_schema=False)

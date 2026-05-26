@@ -1,3 +1,6 @@
+# Uploads (local dev)
+apps/api/uploads/
+
 # Python
 __pycache__/
 *.py[cod]
