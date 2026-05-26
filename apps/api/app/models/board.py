@@ -28,3 +28,6 @@ class Board(Base):
     posts: Mapped[list["Post"]] = relationship(
         "Post", back_populates="board", cascade="all, delete-orphan"
     )
+    acl_entries: Mapped[list["BoardAcl"]] = relationship(
+        "BoardAcl", back_populates="board", cascade="all, delete-orphan"
+    )

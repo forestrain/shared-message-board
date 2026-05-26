@@ -17,6 +17,7 @@ export type BoardOut = {
   visibility: string;
   created_at: string;
   creator: CreatorBrief;
+  allowed_members?: CreatorBrief[];
 };
 
 export type PostBrief = {

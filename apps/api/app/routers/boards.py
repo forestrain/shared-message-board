@@ -4,7 +4,7 @@ import uuid
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -19,8 +19,10 @@ from app.schemas.board import (
     BoardUpdate,
     PostBrief,
 )
-from app.services.board_order import move_board_in_user_list, sorted_public_boards
 from app.schemas.common import QuotedPostBrief
+from app.services.board_access import PRIVATE, clear_board_acl, sync_board_acl
+from app.services.board_order import list_home_boards, move_board_in_user_list
+from app.services.board_present import board_to_out
 from app.services.post_present import truncate_preview
 
 router = APIRouter(prefix="/boards", tags=["boards"])
@@ -61,7 +63,6 @@ _POST_PREVIEW_LOAD = (
 
 
 def _preview_posts_for_board(db: Session, board_id: uuid.UUID, limit: int = 2) -> list[Post]:
-    """首页摘要：先置顶（最多 limit 条），不足则用最新非置顶帖补齐。"""
     pinned = list(
         db.scalars(
             select(Post)
@@ -111,7 +112,7 @@ def list_public_boards(
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> BoardListResponse:
-    all_boards = sorted_public_boards(db, user)
+    all_boards = list_home_boards(db, user)
     total = len(all_boards)
     rows = all_boards[skip : skip + limit]
     board_ids = [b.id for b in rows]
@@ -144,7 +145,7 @@ def create_board(
     board = db.execute(
         select(Board).options(joinedload(Board.creator)).where(Board.id == board.id)
     ).scalar_one()
-    return BoardOut.model_validate(board)
+    return board_to_out(db, board, user)
 
 
 @router.post("/{board_id}/order/move", status_code=status.HTTP_204_NO_CONTENT)
@@ -158,13 +159,18 @@ def move_board_order(
 
 
 @router.get("/{board_id}", response_model=BoardOut)
-def get_board(board_id: uuid.UUID, db: Session = Depends(get_db)) -> BoardOut:
+def get_board(
+    board_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
+) -> BoardOut:
+    from app.deps_board import require_board_read
+
+    board = require_board_read(board_id, db, user)
     board = db.execute(
-        select(Board).options(joinedload(Board.creator)).where(Board.id == board_id)
-    ).scalar_one_or_none()
-    if board is None or board.visibility != PUBLIC:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Board not found")
-    return BoardOut.model_validate(board)
+        select(Board).options(joinedload(Board.creator)).where(Board.id == board.id)
+    ).scalar_one()
+    return board_to_out(db, board, user)
 
 
 @router.patch("/{board_id}", response_model=BoardOut)
@@ -174,18 +180,22 @@ def update_board(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> BoardOut:
-    if body.title is None and body.description is None:
+    if (
+        body.title is None
+        and body.description is None
+        and body.visibility is None
+        and body.member_emails is None
+    ):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="At least one of title or description is required",
+            detail="请至少提供一项要修改的内容",
         )
     board = db.get(Board, board_id)
     if board is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Board not found")
     if board.creator_id != user.id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Not allowed")
-    if board.visibility != PUBLIC:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Not allowed")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="仅版主可修改留言板")
+
     if body.title is not None:
         t = body.title.strip()
         if not t:
@@ -193,12 +203,28 @@ def update_board(
         board.title = t
     if body.description is not None:
         board.description = body.description.strip() or None
+
+    if body.visibility == PRIVATE:
+        board.visibility = PRIVATE
+        if body.member_emails is not None:
+            sync_board_acl(db, board, body.member_emails)
+    elif body.visibility == PUBLIC:
+        board.visibility = PUBLIC
+        clear_board_acl(db, board.id)
+    elif body.member_emails is not None:
+        if board.visibility != PRIVATE:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="仅私密留言板可设置可见成员",
+            )
+        sync_board_acl(db, board, body.member_emails)
+
     db.add(board)
     db.commit()
     board = db.execute(
         select(Board).options(joinedload(Board.creator)).where(Board.id == board_id)
     ).scalar_one()
-    return BoardOut.model_validate(board)
+    return board_to_out(db, board, user)
 
 
 @router.delete("/{board_id}", status_code=status.HTTP_204_NO_CONTENT)

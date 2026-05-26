@@ -8,6 +8,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import Board, User, UserBoardOrder
+from app.services.board_access import PRIVATE, private_boards_for_user
 
 PUBLIC = "public"
 MoveDirection = Literal["up", "down"]
@@ -41,11 +42,19 @@ def sort_boards_for_user(boards: list[Board], order_map: dict[uuid.UUID, int]) -
     return sorted(boards, key=sort_key)
 
 
-def sorted_public_boards(db: Session, user: Optional[User]) -> list[Board]:
-    boards = _load_public_boards(db)
+def list_home_boards(db: Session, user: Optional[User]) -> list[Board]:
+    """首页列表：公开板（可排序）+ 当前用户可访问的私密板。"""
+    public = sort_boards_for_user(_load_public_boards(db), _order_map(db, user.id) if user else {})
     if user is None:
-        return boards
-    return sort_boards_for_user(boards, _order_map(db, user.id))
+        return public
+    private = private_boards_for_user(db, user)
+    private_ids = {b.id for b in private}
+    public = [b for b in public if b.id not in private_ids]
+    return public + private
+
+
+def sorted_public_boards(db: Session, user: Optional[User]) -> list[Board]:
+    return list_home_boards(db, user)
 
 
 def _save_order(db: Session, user_id: uuid.UUID, board_ids: list[uuid.UUID]) -> None:
@@ -61,7 +70,7 @@ def move_board_in_user_list(
     board_id: uuid.UUID,
     direction: MoveDirection,
 ) -> None:
-    boards = sorted_public_boards(db, user)
+    boards = list_home_boards(db, user)
     ids = [b.id for b in boards]
     if board_id not in ids:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Board not found")

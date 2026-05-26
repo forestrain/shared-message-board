@@ -458,8 +458,66 @@ body {
   min-width: 0;
 }
 
+.board-owner-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .board-edit-btn {
   flex-shrink: 0;
+}
+
+.board-visibility-badge {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #7c3aed;
+  background: rgba(124, 58, 237, 0.12);
+  border-radius: 999px;
+}
+
+.board-item-private-tag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  vertical-align: middle;
+  color: #7c3aed;
+  background: rgba(124, 58, 237, 0.15);
+  border-radius: 4px;
+}
+
+.visibility-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.visibility-option {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.visibility-option--active {
+  border-color: var(--color-primary);
+  background: rgba(61, 122, 150, 0.1);
+  color: var(--color-primary-dark);
+  font-weight: 600;
+}
+
+.popup-desc {
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  color: #64748b;
+  line-height: 1.45;
 }
 
 .compose-actions {

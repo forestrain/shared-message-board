@@ -124,7 +124,12 @@ export default function HomePage() {
                   onClick={() => navigate(`/boards/${b.id}`)}
                 >
                   <div className="board-list-item-head">
-                    <h3 className="board-item-title">{b.title}</h3>
+                    <h3 className="board-item-title">
+                      {b.title}
+                      {b.visibility === "private" ? (
+                        <span className="board-item-private-tag">私密</span>
+                      ) : null}
+                    </h3>
                     <span className="board-item-arrow" aria-hidden>
                       ›
                     </span>

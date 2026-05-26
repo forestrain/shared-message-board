@@ -18,6 +18,11 @@ class BoardCreate(BaseModel):
 class BoardUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = Field(None, max_length=8000)
+    visibility: Optional[Literal["public", "private"]] = None
+    member_emails: Optional[list[str]] = Field(
+        None,
+        description="私密板可见用户邮箱（须已注册）；版主无需列入",
+    )
 
 
 class BoardOut(BaseModel):
@@ -29,6 +34,7 @@ class BoardOut(BaseModel):
     visibility: str
     created_at: datetime
     creator: CreatorBrief
+    allowed_members: list[CreatorBrief] = Field(default_factory=list)
 
 
 class PostBrief(BaseModel):

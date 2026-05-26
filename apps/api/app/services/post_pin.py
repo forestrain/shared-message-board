@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import Board, Post, User
+from app.services.board_access import user_can_write_board
 
 MAX_PINNED_PER_BOARD = 2
 
@@ -33,15 +34,15 @@ def get_mutable_post(db: Session, post_id: uuid.UUID) -> Post | None:
     ).scalar_one_or_none()
 
 
-def require_board_owner(board: Board, user: User) -> None:
+def require_board_owner(db: Session, board: Board, user: User) -> None:
     if board.creator_id != user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="仅留言板版主可操作置顶")
-    if board.visibility != "public":
+    if not user_can_write_board(db, board, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Not allowed")
 
 
 def pin_post(db: Session, post: Post, board: Board, user: User) -> Post:
-    require_board_owner(board, user)
+    require_board_owner(db, board, user)
     if post.board_id != board.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Post not found")
     if post.pinned_at is not None:
@@ -59,7 +60,7 @@ def pin_post(db: Session, post: Post, board: Board, user: User) -> Post:
 
 
 def unpin_post(db: Session, post: Post, board: Board, user: User) -> Post:
-    require_board_owner(board, user)
+    require_board_owner(db, board, user)
     if post.board_id != board.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Post not found")
     post.pinned_at = None

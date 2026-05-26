@@ -19,9 +19,13 @@ export default function BoardDetailPage() {
   const [quotedPost, setQuotedPost] = useState<PostOut | null>(null);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [accessOpen, setAccessOpen] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
+  const [visibility, setVisibility] = useState<"public" | "private">("public");
+  const [memberEmails, setMemberEmails] = useState("");
   const [savingBoard, setSavingBoard] = useState(false);
+  const [savingAccess, setSavingAccess] = useState(false);
   const [loadErr, setLoadErr] = useState<string | null>(null);
 
   const loadBoard = useCallback(async () => {
@@ -62,6 +66,48 @@ export default function BoardDetailPage() {
     setEditTitle(board.title);
     setEditDesc(board.description ?? "");
     setEditOpen(true);
+  };
+
+  const openAccess = () => {
+    if (!board) return;
+    setVisibility(board.visibility === "private" ? "private" : "public");
+    setMemberEmails((board.allowed_members ?? []).map((m) => m.email).join("\n"));
+    setAccessOpen(true);
+  };
+
+  const saveAccess = async () => {
+    if (!boardId || !board) return;
+    setSavingAccess(true);
+    try {
+      const payload: {
+        visibility: "public" | "private";
+        member_emails?: string[];
+      } = { visibility };
+      if (visibility === "private") {
+        payload.member_emails = memberEmails
+          .split(/[\n,，;；\s]+/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+      const res = await fetchApi(`/api/v1/boards/${boardId}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await parseJson(res);
+      if (!res.ok) {
+        Toast.show({ content: formatApiError(res, body) });
+        return;
+      }
+      setBoard(body as BoardOut);
+      setAccessOpen(false);
+      Toast.show({ content: visibility === "private" ? "已设为私密板" : "已设为公开板" });
+    } catch {
+      Toast.show({ content: "网络错误" });
+    } finally {
+      setSavingAccess(false);
+    }
   };
 
   const saveBoard = async () => {
@@ -185,11 +231,19 @@ export default function BoardDetailPage() {
         <div className="board-detail-head">
           <h2 className="page-card-title">{board.title}</h2>
           {isOwner ? (
-            <Button size="small" fill="outline" className="board-edit-btn" onClick={openEdit}>
-              编辑
-            </Button>
+            <div className="board-owner-actions">
+              <Button size="small" fill="outline" className="board-edit-btn" onClick={openEdit}>
+                编辑
+              </Button>
+              <Button size="small" fill="outline" className="board-edit-btn" onClick={openAccess}>
+                权限
+              </Button>
+            </div>
           ) : null}
         </div>
+        {board.visibility === "private" ? (
+          <span className="board-visibility-badge">私密 · 仅指定用户可见</span>
+        ) : null}
         <p className="board-meta">
           {authorLabel(board.creator)} · {new Date(board.created_at).toLocaleString("zh-CN")}
         </p>
@@ -215,7 +269,7 @@ export default function BoardDetailPage() {
             <button type="button" className="text-link" onClick={() => navigate("/login")}>
               登录
             </button>
-            后可发帖（列表所有人可见）。
+            后可发帖。
           </div>
         ) : (
           <>
@@ -334,6 +388,50 @@ export default function BoardDetailPage() {
           </ul>
         )}
       </Card>
+
+      <Popup
+        visible={accessOpen}
+        onMaskClick={() => setAccessOpen(false)}
+        position="bottom"
+        bodyStyle={{ borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16 }}
+      >
+        <h3 className="popup-title">留言板权限</h3>
+        <p className="popup-desc">私密板仅你与下列已注册用户可见、可留言。</p>
+        <div className="visibility-toggle">
+          <button
+            type="button"
+            className={`visibility-option${visibility === "public" ? " visibility-option--active" : ""}`}
+            onClick={() => setVisibility("public")}
+          >
+            公开
+          </button>
+          <button
+            type="button"
+            className={`visibility-option${visibility === "private" ? " visibility-option--active" : ""}`}
+            onClick={() => setVisibility("private")}
+          >
+            私密
+          </button>
+        </div>
+        {visibility === "private" ? (
+          <FormField label="可见用户邮箱（每行一个，或逗号分隔）">
+            <TextArea
+              value={memberEmails}
+              onChange={setMemberEmails}
+              placeholder="friend@example.com"
+              rows={4}
+            />
+          </FormField>
+        ) : null}
+        <div className="popup-actions">
+          <Button fill="outline" onClick={() => setAccessOpen(false)}>
+            取消
+          </Button>
+          <Button color="primary" loading={savingAccess} onClick={() => void saveAccess()}>
+            保存
+          </Button>
+        </div>
+      </Popup>
 
       <Popup
         visible={editOpen}
