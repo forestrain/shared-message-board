@@ -67,6 +67,8 @@ nano .env.prod   # 或 vim
 
 若已上 HTTPS，设 `SESSION_SECURE=true`，且 `CORS_ORIGINS` 用 `https://...`。
 
+**@ 引用邮件通知（可选）**：配置 `APP_PUBLIC_URL` 与 `SMTP_*`（见 `.env.prod.example`）。未填 `SMTP_HOST` 时不发邮件，发帖不受影响。Gmail 示例：`SMTP_HOST=smtp.gmail.com`，`SMTP_USER` 为你的邮箱，`SMTP_PASSWORD` 为[应用专用密码](https://myaccount.google.com/apppasswords)，`SMTP_FROM` 与 `SMTP_USER` 相同。
+
 ---
 
 ## 4. 在 VM 上直接部署

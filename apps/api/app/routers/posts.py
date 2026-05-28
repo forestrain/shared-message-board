@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import func, nulls_last, select
 from sqlalchemy.orm import Session, joinedload
 
@@ -16,6 +16,7 @@ from app.schemas.post import PostCreate, PostListResponse, PostOut
 from app.services.board_access import user_can_write_board
 from app.services.media import normalize_image_url
 from app.services.post_pin import get_mutable_post, pin_post, unpin_post
+from app.services.mention_notify import send_mention_email_background
 from app.services.post_present import post_to_out
 
 board_posts_router = APIRouter(prefix="/boards/{board_id}/posts", tags=["posts"])
@@ -55,6 +56,7 @@ def list_posts(
 def create_post(
     board_id: uuid.UUID,
     body: PostCreate,
+    background_tasks: BackgroundTasks,
     board: Board = Depends(require_board_write),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -82,6 +84,16 @@ def create_post(
     db.add(post)
     db.commit()
     post = db.execute(select(Post).options(*_POST_LOAD).where(Post.id == post.id)).scalar_one()
+
+    if quoted_id is not None:
+        background_tasks.add_task(
+            send_mention_email_background,
+            post.id,
+            quoted_id,
+            board_id,
+            user.id,
+        )
+
     return post_to_out(post)
 
 
