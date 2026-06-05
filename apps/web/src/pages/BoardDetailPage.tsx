@@ -7,6 +7,7 @@ import PostImage from "../components/PostImage";
 import PostQuoteBlock from "../components/PostQuoteBlock";
 import type { BoardOut, PostListResponse, PostOut } from "../lib/api";
 import { authorLabel, fetchApi, formatApiError, parseJson } from "../lib/api";
+import { compressImageForUpload } from "../lib/imageCompress";
 import { resolveQuotedPost } from "../lib/postQuote";
 
 export default function BoardDetailPage() {
@@ -30,6 +31,7 @@ export default function BoardDetailPage() {
   const [memberEmails, setMemberEmails] = useState("");
   const [savingBoard, setSavingBoard] = useState(false);
   const [savingAccess, setSavingAccess] = useState(false);
+  const [compressingImage, setCompressingImage] = useState(false);
   const [loadErr, setLoadErr] = useState<string | null>(null);
 
   const loadBoard = useCallback(async () => {
@@ -151,19 +153,32 @@ export default function BoardDetailPage() {
     if (imageInputRef.current) imageInputRef.current.value = "";
   };
 
-  const onPickImage = (file: File | null) => {
+  const onPickImage = async (file: File | null) => {
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      Toast.show({ content: "请选择图片文件" });
-      return;
+    setCompressingImage(true);
+    const toast = Toast.show({ content: "正在压缩图片…", duration: 0, maskClickable: false });
+    try {
+      const result = await compressImageForUpload(file);
+      if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+      setPendingImage(result.file);
+      setImagePreviewUrl(URL.createObjectURL(result.file));
+      if (result.compressed) {
+        const mbBefore = (result.originalSize / 1024 / 1024).toFixed(1);
+        const mbAfter = (result.finalSize / 1024 / 1024).toFixed(1);
+        Toast.show({
+          content: `已压缩：${mbBefore}MB → ${mbAfter}MB`,
+          duration: 2000,
+        });
+      }
+    } catch (err) {
+      Toast.show({
+        content: err instanceof Error ? err.message : "图片处理失败",
+      });
+    } finally {
+      toast.close();
+      setCompressingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
     }
-    if (file.size > 2 * 1024 * 1024) {
-      Toast.show({ content: "图片不能超过 2MB" });
-      return;
-    }
-    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
-    setPendingImage(file);
-    setImagePreviewUrl(URL.createObjectURL(file));
   };
 
   const uploadPendingImage = async (): Promise<string | null> => {
@@ -350,9 +365,9 @@ export default function BoardDetailPage() {
             <input
               ref={imageInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
+              accept="image/*"
               className="compose-image-input"
-              onChange={(e) => onPickImage(e.target.files?.[0] ?? null)}
+              onChange={(e) => void onPickImage(e.target.files?.[0] ?? null)}
             />
             {imagePreviewUrl ? (
               <div className="compose-image-preview">
@@ -363,7 +378,13 @@ export default function BoardDetailPage() {
               </div>
             ) : null}
             <div className="compose-actions">
-              <Button size="small" fill="outline" onClick={() => imageInputRef.current?.click()}>
+              <Button
+                size="small"
+                fill="outline"
+                loading={compressingImage}
+                disabled={compressingImage}
+                onClick={() => imageInputRef.current?.click()}
+              >
                 添加图片
               </Button>
               <Button
